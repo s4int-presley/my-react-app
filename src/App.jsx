@@ -7,10 +7,46 @@ import {
   where,
   onSnapshot,
   serverTimestamp,
+  doc,
+  updateDoc,
+  arrayUnion,
+  arrayRemove,
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import Login from './Login';
 import './App.css';
+
+// Helper: get today's date as "YYYY-MM-DD"
+function getTodayString() {
+  const now = new Date();
+  return now.toISOString().split('T')[0];
+}
+
+// Helper: calculate current streak from a list of completed date strings
+function calculateStreak(completedDates) {
+  if (!completedDates || completedDates.length === 0) return 0;
+
+  const dateSet = new Set(completedDates);
+  let streak = 0;
+  let cursor = new Date();
+
+  // If today isn't done yet, start checking from yesterday instead
+  if (!dateSet.has(getTodayString())) {
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  while (true) {
+    const dateStr = cursor.toISOString().split('T')[0];
+    if (dateSet.has(dateStr)) {
+      streak++;
+      cursor.setDate(cursor.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+}
 
 function App() {
   const [user, setUser] = useState(null);
@@ -18,7 +54,6 @@ function App() {
   const [habits, setHabits] = useState([]);
   const [newHabit, setNewHabit] = useState('');
 
-  // Track login state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -27,7 +62,6 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // Listen for this user's habits in real time
   useEffect(() => {
     if (!user) {
       setHabits([]);
@@ -54,10 +88,27 @@ function App() {
     await addDoc(collection(db, 'habits'), {
       uid: user.uid,
       name: newHabit.trim(),
+      completedDates: [],
       createdAt: serverTimestamp(),
     });
 
     setNewHabit('');
+  };
+
+  const handleToggleToday = async (habit) => {
+    const today = getTodayString();
+    const habitRef = doc(db, 'habits', habit.id);
+    const isDoneToday = habit.completedDates?.includes(today);
+
+    if (isDoneToday) {
+      await updateDoc(habitRef, {
+        completedDates: arrayRemove(today),
+      });
+    } else {
+      await updateDoc(habitRef, {
+        completedDates: arrayUnion(today),
+      });
+    }
   };
 
   if (loading) {
@@ -67,6 +118,8 @@ function App() {
   if (!user) {
     return <Login />;
   }
+
+  const today = getTodayString();
 
   return (
     <div style={{ maxWidth: '400px', margin: '80px auto', textAlign: 'center' }}>
@@ -86,11 +139,33 @@ function App() {
       </form>
 
       <ul style={{ marginTop: '20px', listStyle: 'none', padding: 0, textAlign: 'left' }}>
-        {habits.map((habit) => (
-          <li key={habit.id} style={{ padding: '8px 0', borderBottom: '1px solid #333' }}>
-            {habit.name}
-          </li>
-        ))}
+        {habits.map((habit) => {
+          const isDoneToday = habit.completedDates?.includes(today);
+          const streak = calculateStreak(habit.completedDates);
+
+          return (
+            <li
+              key={habit.id}
+              style={{
+                padding: '10px 0',
+                borderBottom: '1px solid #333',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={isDoneToday || false}
+                onChange={() => handleToggleToday(habit)}
+              />
+              <span style={{ flex: 1 }}>{habit.name}</span>
+              <span style={{ fontSize: '14px', color: '#888' }}>
+                🔥 {streak} day{streak !== 1 ? 's' : ''}
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
