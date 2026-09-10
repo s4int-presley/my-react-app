@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import confetti from 'canvas-confetti';
 import {
   collection,
   addDoc,
@@ -18,6 +19,8 @@ import Login from './Login';
 import Landing from './Landing';
 import Silk from './Silk';
 import './App.css';
+
+const MILESTONES = [3, 7, 14, 30];
 
 function getTodayString() {
   const now = new Date();
@@ -48,7 +51,16 @@ function calculateStreak(completedDates) {
   return streak;
 }
 
-function Dashboard({ user, habits, newHabit, setNewHabit, handleAddHabit, handleToggleToday }) {
+function triggerConfetti() {
+  confetti({
+    particleCount: 120,
+    spread: 90,
+    origin: { y: 0.6 },
+    colors: ['#a855f7', '#22D3EE', '#c084fc', '#ffffff'],
+  });
+}
+
+function Dashboard({ user, habits, newHabit, setNewHabit, handleAddHabit, handleToggleToday, celebration }) {
   const today = getTodayString();
 
   return (
@@ -56,6 +68,28 @@ function Dashboard({ user, habits, newHabit, setNewHabit, handleAddHabit, handle
       <div style={{ position: 'fixed', inset: 0, zIndex: -1 }}>
         <Silk speed={5} scale={1} color="#22D3EE" noiseIntensity={1.5} rotation={0} />
       </div>
+
+      {celebration && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '24px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 50,
+            padding: '14px 28px',
+            borderRadius: '999px',
+            background: 'rgba(168, 85, 247, 0.95)',
+            color: 'white',
+            fontWeight: 700,
+            fontSize: '15px',
+            boxShadow: '0 0 30px rgba(168, 85, 247, 0.8)',
+            textAlign: 'center',
+          }}
+        >
+          {celebration}
+        </div>
+      )}
 
       <div style={{ maxWidth: '480px', margin: '0 auto', padding: '60px 20px', position: 'relative', zIndex: 1 }}>
         <div style={{ textAlign: 'center', marginBottom: '40px' }}>
@@ -187,6 +221,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [habits, setHabits] = useState([]);
   const [newHabit, setNewHabit] = useState('');
+  const [celebration, setCelebration] = useState(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -233,15 +268,25 @@ function App() {
     const today = getTodayString();
     const habitRef = doc(db, 'habits', habit.id);
     const isDoneToday = habit.completedDates?.includes(today);
+    const currentDates = habit.completedDates || [];
 
     if (isDoneToday) {
       await updateDoc(habitRef, {
         completedDates: arrayRemove(today),
       });
     } else {
+      const newDates = [...currentDates, today];
+      const newStreak = calculateStreak(newDates);
+
       await updateDoc(habitRef, {
         completedDates: arrayUnion(today),
       });
+
+      if (MILESTONES.includes(newStreak)) {
+        triggerConfetti();
+        setCelebration(`🔥 ${newStreak}-day streak on "${habit.name}"! Keep it up.`);
+        setTimeout(() => setCelebration(null), 3500);
+      }
     }
   };
 
@@ -285,6 +330,7 @@ function App() {
               setNewHabit={setNewHabit}
               handleAddHabit={handleAddHabit}
               handleToggleToday={handleToggleToday}
+              celebration={celebration}
             />
           ) : (
             <Navigate to="/login" replace />
