@@ -1,5 +1,6 @@
 // src/Login.jsx
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -13,6 +14,7 @@ function Login() {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   const handleEmailAuth = async (e) => {
     e.preventDefault();
@@ -23,6 +25,7 @@ function Login() {
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
+      navigate('/dashboard');
     } catch (err) {
       setError(err.message);
     }
@@ -33,6 +36,7 @@ function Login() {
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
+      navigate('/dashboard');
     } catch (err) {
       setError(err.message);
     }
